@@ -18,7 +18,7 @@ package org.fineract.module.stellar.horizonadapter;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import javafx.util.Pair;
+import java.util.Objects;
 import org.fineract.module.stellar.service.UnexpectedException;
 import org.fineract.module.stellar.federation.StellarAccountId;
 import org.slf4j.Logger;
@@ -61,7 +61,38 @@ public class HorizonServerUtilities {
 
   private final LoadingCache<String, Account> accounts;
 
-  private final LoadingCache<Pair<String, StellarAccountId>, Map<VaultOffer, Long>> offers;
+  static class AccountIdAndVaultId {
+    final String accountId;
+    final StellarAccountId vaultId;
+
+    AccountIdAndVaultId(
+        final String accountId,
+        final StellarAccountId vaultId) {
+      this.accountId = accountId;
+      this.vaultId = vaultId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      AccountIdAndVaultId that = (AccountIdAndVaultId) o;
+      return Objects.equals(accountId, that.accountId) &&
+          Objects.equals(vaultId, that.vaultId);
+    }
+
+    @Override
+    public int hashCode() {
+
+      return Objects.hash(accountId, vaultId);
+    }
+  }
+
+  private final LoadingCache<AccountIdAndVaultId, Map<VaultOffer, Long>> offers;
 
   @Autowired
   HorizonServerUtilities(@Qualifier("stellarBridgeLogger") final Logger logger)
@@ -88,13 +119,13 @@ public class HorizonServerUtilities {
         });
 
     offers = CacheBuilder.newBuilder().build(
-        new CacheLoader<Pair<String, StellarAccountId>, Map<VaultOffer, Long>>() {
+        new CacheLoader<AccountIdAndVaultId, Map<VaultOffer, Long>>() {
           @Override
-          public Map<VaultOffer, Long> load(final Pair<String, StellarAccountId> accountIdVaultId) {
+          public Map<VaultOffer, Long> load(final AccountIdAndVaultId accountIdVaultId) {
             return VaultOffer.getVaultOffers(
                 server,
-                accountIdVaultId.getKey(),
-                accountIdVaultId.getValue());
+                accountIdVaultId.accountId,
+                accountIdVaultId.vaultId);
       }
     });
   }
@@ -435,8 +466,8 @@ public class HorizonServerUtilities {
     final BigDecimal balanceOfVaultAsset = accountHelper.getBalanceOfAsset(vaultAsset);
     final BigDecimal remainingTrustInVaultAsset = accountHelper.getRemainingTrustInAsset(vaultAsset);
 
-    final Pair<String, StellarAccountId> offerKey =
-        new Pair<>(accountKeyPair.getAccountId(), vaultAccountId);
+    final AccountIdAndVaultId offerKey =
+        new AccountIdAndVaultId(accountKeyPair.getAccountId(), vaultAccountId);
     offers.refresh(offerKey);
     final Map<VaultOffer, Long> vaultOffers = offers.getUnchecked(offerKey);
 
@@ -590,17 +621,46 @@ public class HorizonServerUtilities {
     final Set<Asset> targetAssets = targetAccount.findAssetsWithTrust(amount, assetCode);
     final Set<Asset> sourceAssets = sourceAccount.findAssetsWithBalance(amount, assetCode);
 
-    final Optional<Pair<Asset, Asset>> assetPair = findAnyMatchingAssetPair(
+    final Optional<MatchingAssetPair> assetPair = findAnyMatchingAssetPair(
         amount, sourceAssets, targetAssets, sourceAccountKeyPair, targetAccountKeyPair);
     if (!assetPair.isPresent())
       throw StellarPaymentFailedException.noPathExists(assetCode);
 
     pay(targetAccountId, amount,
-        assetPair.get().getKey(), assetPair.get().getValue(),
+        assetPair.get().asset1, assetPair.get().asset2,
         stellarAccountPrivateKey);
   }
 
-  private Optional<Pair<Asset, Asset>> findAnyMatchingAssetPair(
+  static class MatchingAssetPair {
+    final Asset asset1;
+    final Asset asset2;
+
+    MatchingAssetPair(Asset asset1, Asset asset2) {
+      this.asset1 = asset1;
+      this.asset2 = asset2;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      MatchingAssetPair that = (MatchingAssetPair) o;
+      return Objects.equals(asset1, that.asset1) &&
+          Objects.equals(asset2, that.asset2);
+    }
+
+    @Override
+    public int hashCode() {
+
+      return Objects.hash(asset1, asset2);
+    }
+  }
+
+  private Optional<MatchingAssetPair> findAnyMatchingAssetPair(
       final BigDecimal amount,
       final Set<Asset> sourceAssets,
       final Set<Asset> targetAssets,
@@ -629,7 +689,7 @@ public class HorizonServerUtilities {
           {
             if (sourceAssets.contains(path.getSourceAsset()))
             {
-              return Optional.of(new Pair<>(path.getSourceAsset(), targetAsset));
+              return Optional.of(new MatchingAssetPair(path.getSourceAsset(), targetAsset));
             }
           }
         }

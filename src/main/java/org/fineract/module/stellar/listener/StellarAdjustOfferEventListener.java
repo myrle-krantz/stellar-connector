@@ -15,7 +15,7 @@
  */
 package org.fineract.module.stellar.listener;
 
-import javafx.util.Pair;
+import java.util.Objects;
 import org.fineract.module.stellar.federation.StellarAccountId;
 import org.fineract.module.stellar.horizonadapter.HorizonServerUtilities;
 import org.fineract.module.stellar.horizonadapter.StellarOfferAdjustmentFailedException;
@@ -33,11 +33,39 @@ import org.springframework.stereotype.Component;
 @Component
 public class StellarAdjustOfferEventListener implements
     ApplicationListener<StellarAdjustOfferEvent> {
+  static class AccountIdToAssetCode {
+    final String accountId;
+    final String assetCode;
+
+    AccountIdToAssetCode(String accountId, String assetCode) {
+      this.accountId = accountId;
+      this.assetCode = assetCode;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      AccountIdToAssetCode that = (AccountIdToAssetCode) o;
+      return Objects.equals(accountId, that.accountId) &&
+          Objects.equals(assetCode, that.assetCode);
+    }
+
+    @Override
+    public int hashCode() {
+
+      return Objects.hash(accountId, assetCode);
+    }
+  }
 
   private final AccountBridgeRepository accountBridgeRepository;
   private final StellarAdjustOfferEventRepository stellarAdjustOfferEventRepository;
   private final HorizonServerUtilities horizonServerUtilities;
-  private final ValueSynchronizer<Pair<String, String>> retrySynchronizer;
+  private final ValueSynchronizer<AccountIdToAssetCode> retrySynchronizer;
   private final Logger logger;
 
   @Autowired
@@ -59,7 +87,7 @@ public class StellarAdjustOfferEventListener implements
         accountBridgeRepository.findByMifosTenantId(event.getMifosAccountId());
 
 
-    retrySynchronizer.sync(new Pair<>(event.getMifosAccountId(), event.getAssetCode()), () -> {
+    retrySynchronizer.sync(new AccountIdToAssetCode(event.getMifosAccountId(), event.getAssetCode()), () -> {
       final StellarAdjustOfferEventPersistency eventSource = this.stellarAdjustOfferEventRepository.findOne(event.getEventId());
 
       if (accountBridge == null)

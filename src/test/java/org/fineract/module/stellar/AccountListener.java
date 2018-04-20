@@ -16,7 +16,6 @@
 package org.fineract.module.stellar;
 
 import com.google.common.base.Preconditions;
-import javafx.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.stellar.sdk.Asset;
@@ -39,6 +38,16 @@ import static org.fineract.module.stellar.StellarBridgeTestHelpers.getStellarAcc
 import static org.fineract.module.stellar.StellarBridgeTestHelpers.getStellarVaultAccountIdForTenantId;
 
 public class AccountListener {
+  static class Pair
+  {
+    private final Optional<String> stellarAccountIdForTenantId;
+    private final String tenantId;
+
+    public Pair(Optional<String> stellarAccountIdForTenantId, String tenantId) {
+      this.stellarAccountIdForTenantId = stellarAccountIdForTenantId;
+      this.tenantId = tenantId;
+    }
+  }
 
   static class Credit
   {
@@ -196,19 +205,19 @@ public class AccountListener {
 
     Arrays.asList(tenantIds).stream()
         .filter(tenantId -> tenantId != null)
-        .map(tenantId -> new Pair<>(getStellarAccountIdForTenantId(tenantId), tenantId))
-        .filter(pair -> pair.getKey().isPresent())
+        .map(tenantId -> new Pair(getStellarAccountIdForTenantId(tenantId), tenantId))
+        .filter(pair -> pair.stellarAccountIdForTenantId.isPresent())
         .forEachOrdered(pair ->
-          stellarIdToTenantId.put(pair.getKey().get(), pair.getValue())
+          stellarIdToTenantId.put(pair.stellarAccountIdForTenantId.get(), pair.tenantId)
         );
 
 
     Arrays.asList(tenantIds).stream()
         .filter(tenantId -> tenantId != null)
-        .map(tenantId -> new Pair<>(getStellarVaultAccountIdForTenantId(tenantId), tenantId))
-        .filter(pair -> pair.getKey().isPresent())
+        .map(tenantId -> new Pair(getStellarVaultAccountIdForTenantId(tenantId), tenantId))
+        .filter(pair -> pair.stellarAccountIdForTenantId.isPresent())
         .forEachOrdered(pair ->
-            stellarVaultIdToTenantId.put(pair.getKey().get(), pair.getValue()));
+            stellarVaultIdToTenantId.put(pair.stellarAccountIdForTenantId.get(), pair.tenantId));
 
     stellarIdToTenantId.entrySet().stream().forEach(
         mapEntry -> installPaymentListener(serverAddress, mapEntry.getKey()));
